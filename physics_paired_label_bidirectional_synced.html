@@ -15,8 +15,12 @@
   select{min-width:92px} #problemSelect{min-width:128px} input[type="text"]{width:90px}
   button{cursor:pointer;font-weight:650} button.primary{background:var(--accent);border-color:var(--accent);color:white} button:hover{filter:brightness(.98)}
   .toggle{gap:5px}.toggle input{transform:translateY(1px)}
-  .main{height:calc(100vh - 62px);display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;max-width:1800px;margin:auto}
+  .main{--left-pane:minmax(320px,1fr);height:calc(100vh - 62px);display:grid;grid-template-columns:var(--left-pane) 8px minmax(260px,1fr);gap:6px;padding:12px;max-width:1800px;margin:auto}
   .pane{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;min-width:0}
+  .paneDivider{align-self:stretch;border:0;border-radius:6px;background:transparent;cursor:col-resize;position:relative;touch-action:none}
+  .paneDivider::before{content:"";position:absolute;top:0;bottom:0;left:3px;width:2px;border-radius:2px;background:var(--line)}
+  .paneDivider:hover::before,.paneDivider:focus-visible::before,body.resizingPanes .paneDivider::before{background:#9ca3af}
+  .paneDivider:focus-visible{outline:2px solid rgba(37,99,235,.35);outline-offset:2px}
   .paneHeader{padding:8px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;background:#fbfcff}
   .paneHeader h2{margin:0;font-size:14px}.badge{font-size:12px;color:var(--muted);background:#eef2ff;border-radius:999px;padding:3px 8px}.answerBadge{background:#fff7ed}
   .viewer{position:relative;overflow:auto;flex:1;background:#e5e7eb;padding:14px;scroll-behavior:auto}
@@ -26,7 +30,7 @@
   body.hideMarkers .marker{display:none}.currentMarker{outline:3px solid rgba(34,197,94,.55);}
   .status{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:rgba(17,24,39,.92);color:white;border-radius:999px;padding:8px 14px;font-size:13px;z-index:100;box-shadow:var(--shadow)}
   .hidden{display:none!important}.help{font-size:12px;color:var(--muted);padding:8px 12px;border-top:1px solid var(--line);background:#fbfcff}.loading{position:fixed;inset:0;background:rgba(246,247,251,.96);z-index:200;display:grid;place-items:center;text-align:center}.loadingCard{background:white;border:1px solid var(--line);border-radius:18px;padding:24px 28px;box-shadow:var(--shadow);max-width:560px}.progress{height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:16px}.bar{height:100%;width:10%;background:var(--accent);transition:width .3s}
-  @media(max-width:900px){.main{grid-template-columns:1fr;height:auto}.pane{height:78vh}.title{width:100%}.subtitle{display:block;margin:3px 0 0}.main{padding:8px}.top{gap:8px}.control{font-size:12px}}
+  @media(max-width:900px){.main{grid-template-columns:1fr;height:auto}.paneDivider{display:none}.pane{height:78vh}.title{width:100%}.subtitle{display:block;margin:3px 0 0}.main{padding:8px}.top{gap:8px}.control{font-size:12px}}
 </style>
 </head>
 <body class="hideMarkers">
@@ -43,7 +47,8 @@
 <div id="loading" class="loading"><div class="loadingCard"><h2>Loading paired PDFs…</h2><p>This may take a moment because the full question book and answer manual are bundled into this page for offline use.</p><div class="progress"><div id="bar" class="bar"></div></div><p id="loadMsg">Preparing data</p></div></div>
 <main class="main">
   <section class="pane"><div class="paneHeader"><h2>Question book</h2><span id="qInfo" class="badge">—</span></div><div id="qViewer" class="viewer question"></div><div class="help">Scroll this question side; the answer side will jump to the matching solution label.</div></section>
-  <section class="pane"><div class="paneHeader"><h2>Answer manual</h2><span id="aInfo" class="badge answerBadge">—</span></div><div id="aViewer" class="viewer answer"></div><div class="help">Answer side follows question scrolling; answer-side scrolling also works when sync is on.</div></section>
+  <div id="paneDivider" class="paneDivider" role="separator" aria-orientation="vertical" aria-label="Resize question and answer panes" tabindex="0"></div>
+  <section class="pane"><div class="paneHeader"><h2>Answer manual</h2><span id="aInfo" class="badge answerBadge">—</span></div><div id="aViewer" class="viewer answer"></div><div class="help">Answer side follows question scrolling. Answer side can be scrolled independently.</div></section>
 </main>
 <div id="status" class="status hidden"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -59,6 +64,54 @@ const state = {scale:1.0,currentLabel:null,programmatic:false,showMarkers:false,
 const el = id => document.getElementById(id);
 const status = msg => { const s=el('status'); s.textContent=msg; s.classList.remove('hidden'); clearTimeout(status.t); status.t=setTimeout(()=>s.classList.add('hidden'),1700); };
 const setProgress=(pct,msg)=>{ el('bar').style.width=pct+'%'; if(msg) el('loadMsg').textContent=msg; };
+function initPaneResizer(){
+  const main=document.querySelector('.main');
+  const divider=el('paneDivider');
+  const stacked=window.matchMedia('(max-width: 900px)');
+  const saved=Number(localStorage.getItem('physicsPaneSplit'));
+  const minLeft=300, minRight=300, dividerWidth=8;
+  const applyRatio=ratio=>{
+    if(stacked.matches) return;
+    const rect=main.getBoundingClientRect();
+    if(!rect.width) return;
+    const minRatio=minLeft/rect.width;
+    const maxRatio=(rect.width-minRight-dividerWidth)/rect.width;
+    const clamped=Math.min(Math.max(ratio,minRatio),maxRatio);
+    main.style.setProperty('--left-pane', Math.round(rect.width*clamped)+'px');
+  };
+  if(saved>0 && saved<1) applyRatio(saved);
+  divider.addEventListener('pointerdown',event=>{
+    if(stacked.matches) return;
+    event.preventDefault();
+    divider.setPointerCapture(event.pointerId);
+    document.body.classList.add('resizingPanes');
+  });
+  divider.addEventListener('pointermove',event=>{
+    if(stacked.matches || !divider.hasPointerCapture(event.pointerId)) return;
+    const rect=main.getBoundingClientRect();
+    const left=event.clientX-rect.left;
+    const ratio=left/rect.width;
+    applyRatio(ratio);
+    localStorage.setItem('physicsPaneSplit', String(ratio));
+  });
+  const stopDrag=event=>{
+    if(divider.hasPointerCapture(event.pointerId)) divider.releasePointerCapture(event.pointerId);
+    document.body.classList.remove('resizingPanes');
+  };
+  divider.addEventListener('pointerup',stopDrag);
+  divider.addEventListener('pointercancel',stopDrag);
+  divider.addEventListener('keydown',event=>{
+    if(!['ArrowLeft','ArrowRight'].includes(event.key) || stacked.matches) return;
+    event.preventDefault();
+    const rect=main.getBoundingClientRect();
+    const current=parseFloat(getComputedStyle(main).getPropertyValue('--left-pane')) || rect.width/2;
+    const delta=event.key==='ArrowLeft' ? -40 : 40;
+    const ratio=(current+delta)/rect.width;
+    applyRatio(ratio);
+    localStorage.setItem('physicsPaneSplit', String(ratio));
+  });
+  window.addEventListener('resize',()=>{ const ratio=Number(localStorage.getItem('physicsPaneSplit')); if(ratio>0 && ratio<1) applyRatio(ratio); });
+}
 function decodeParts(parts){
   let total=0, bins=[];
   for (const p of parts){ const b=atob(p); bins.push(b); total += b.length; }
@@ -136,7 +189,6 @@ async function main(){
     updateDropdowns();
     setCurrentLabel(allLabels[0], 'init', true);
     qViewer.container.addEventListener('scroll', ()=>{ if(state.programmatic||!state.sync) return; const lab=labelAtScroll(qViewer.container, questionPositions); if(lab && lab!==state.currentLabel) setCurrentLabel(lab,'questionScroll',true); }, {passive:true});
-    aViewer.container.addEventListener('scroll', ()=>{ if(state.programmatic||!state.sync) return; const lab=labelAtScroll(aViewer.container, answerPositions); if(lab && lab!==state.currentLabel) setCurrentLabel(lab,'answerScroll',true); }, {passive:true});
     el('chapterSelect').addEventListener('change',()=>{ updateProblems(); const first=DATA.labelsByChapter[el('chapterSelect').value][0]; setCurrentLabel(first); });
     el('problemSelect').addEventListener('change',e=>setCurrentLabel(e.target.value));
     el('jumpBtn').addEventListener('click',()=>setCurrentLabel(el('labelInput').value.trim()));
@@ -149,6 +201,7 @@ async function main(){
     status(DATA.counts.paired+' labels paired');
   }catch(e){ console.error(e); el('loadMsg').innerHTML='<b>Could not load viewer.</b><br>'+String(e.message||e); }
 }
+initPaneResizer();
 main();
 })();
 </script>
