@@ -60,6 +60,7 @@
 'use strict';
 const DATA = window.PAIR_DATA;
 const PAGE_GAP = 8;
+const FIT_SCROLLBAR_ALLOWANCE = 18;
 const state = {zoom:1.0,currentLabel:null,programmatic:false,showMarkers:false,sync:true};
 const el = id => document.getElementById(id);
 const status = msg => { const s=el('status'); s.textContent=msg; s.classList.remove('hidden'); clearTimeout(status.t); status.t=setTimeout(()=>s.classList.add('hidden'),1700); };
@@ -126,7 +127,7 @@ function buildOffsets(dims, scaleForPage){ const offsets=[0]; let y=0; for(let i
 class PDFViewer{
   constructor(container, dims, anchors, side){ this.container=container; this.dims=dims; this.anchors=anchors; this.side=side; this.pdf=null; this.pageDivs=[]; this.rendered=new Map(); this.rendering=new Set(); this.offsets=[]; this.scales=[]; this.anchorsByPage=new Map(); for(const a of anchors){ const arr=this.anchorsByPage.get(a.page)||[]; arr.push(a); this.anchorsByPage.set(a.page,arr); } }
   async init(pdf){ this.pdf=pdf; this.rebuild(); }
-  fitScale(pageIndex){ const width=Math.max(1,this.container.clientWidth-12); const pageWidth=this.dims[pageIndex]?.[0]||width; return Math.max(0.2,(width/pageWidth)*state.zoom); }
+  fitScale(pageIndex){ const width=Math.max(1,this.container.clientWidth-12-FIT_SCROLLBAR_ALLOWANCE); const pageWidth=this.dims[pageIndex]?.[0]||width; return Math.max(0.2,(width/pageWidth)*state.zoom); }
   scaleForPage(pageNum){ return this.scales[pageNum-1] || this.fitScale(pageNum-1); }
   anchorTop(a){ return this.offsets[a.page-1] + a.y*this.scaleForPage(a.page); }
   rebuild(){
