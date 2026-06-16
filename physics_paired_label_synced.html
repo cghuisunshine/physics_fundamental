@@ -15,7 +15,7 @@
   select{min-width:92px} #problemSelect{min-width:128px} input[type="text"]{width:90px}
   button{cursor:pointer;font-weight:650} button.primary{background:var(--accent);border-color:var(--accent);color:white} button:hover{filter:brightness(.98)}
   .toggle{gap:5px}.toggle input{transform:translateY(1px)}
-  .main{--left-pane:minmax(320px,1fr);height:calc(100vh - 62px);display:grid;grid-template-columns:var(--left-pane) 8px minmax(260px,1fr);gap:6px;padding:12px;max-width:1800px;margin:auto}
+  .main{--left-pane:minmax(320px,1fr);height:calc(100vh - 62px);display:grid;grid-template-columns:var(--left-pane) 8px minmax(260px,1fr);gap:4px;padding:6px;max-width:1800px;margin:auto}
   .pane{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;min-width:0}
   .paneDivider{align-self:stretch;border:0;border-radius:6px;background:transparent;cursor:col-resize;position:relative;touch-action:none}
   .paneDivider::before{content:"";position:absolute;top:0;bottom:0;left:3px;width:2px;border-radius:2px;background:var(--line)}
@@ -23,8 +23,8 @@
   .paneDivider:focus-visible{outline:2px solid rgba(37,99,235,.35);outline-offset:2px}
   .paneHeader{padding:8px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;background:#fbfcff}
   .paneHeader h2{margin:0;font-size:14px}.badge{font-size:12px;color:var(--muted);background:#eef2ff;border-radius:999px;padding:3px 8px}.answerBadge{background:#fff7ed}
-  .viewer{position:relative;overflow:auto;flex:1;background:#e5e7eb;padding:14px;scroll-behavior:auto}
-  .pageWrap{position:relative;margin:0 auto 18px auto;background:white;box-shadow:0 4px 18px rgba(0,0,0,.18);border-radius:2px;overflow:hidden}
+  .viewer{position:relative;overflow:auto;flex:1;background:#e5e7eb;padding:6px;scroll-behavior:auto}
+  .pageWrap{position:relative;margin:0 auto 8px auto;background:white;box-shadow:0 4px 18px rgba(0,0,0,.18);border-radius:2px;overflow:hidden}
   .pageWrap canvas{display:block;width:100%;height:100%}.placeholder{position:absolute;inset:0;display:grid;place-items:center;color:#9ca3af;font-size:12px;background:#fafafa}
   .marker{position:absolute;transform:translate(-4px,-13px);background:rgba(37,99,235,.94);color:#fff;font-size:11px;line-height:1;border-radius:999px;padding:3px 6px;z-index:5;box-shadow:0 1px 4px rgba(0,0,0,.25);pointer-events:none}.answer .marker{background:rgba(249,115,22,.95)}
   body.hideMarkers .marker{display:none}.currentMarker{outline:3px solid rgba(34,197,94,.55);}
@@ -59,8 +59,8 @@
 (function(){
 'use strict';
 const DATA = window.PAIR_DATA;
-const MARGIN = 18;
-const state = {scale:1.0,currentLabel:null,programmatic:false,showMarkers:false,sync:true};
+const PAGE_GAP = 8;
+const state = {zoom:1.0,currentLabel:null,programmatic:false,showMarkers:false,sync:true};
 const el = id => document.getElementById(id);
 const status = msg => { const s=el('status'); s.textContent=msg; s.classList.remove('hidden'); clearTimeout(status.t); status.t=setTimeout(()=>s.classList.add('hidden'),1700); };
 const setProgress=(pct,msg)=>{ el('bar').style.width=pct+'%'; if(msg) el('loadMsg').textContent=msg; };
@@ -122,15 +122,17 @@ function decodeParts(parts){
 function indexByLabel(list){ const o={}; for(const a of list)o[a.label]=a; return o; }
 const qByLabel=indexByLabel(DATA.questionAnchors), aByLabel=indexByLabel(DATA.answerAnchors);
 const allLabels=DATA.labels;
-function pageOffset(dims, page, scale){ let y=0; for(let i=1;i<page;i++) y += dims[i-1][1]*scale + MARGIN; return y; }
-function buildOffsets(dims, scale){ const offsets=[0]; let y=0; for(let i=0;i<dims.length;i++){ offsets[i]=y; y += dims[i][1]*scale + MARGIN; } return offsets; }
+function buildOffsets(dims, scaleForPage){ const offsets=[0]; let y=0; for(let i=0;i<dims.length;i++){ offsets[i]=y; y += dims[i][1]*scaleForPage(i+1) + PAGE_GAP; } return offsets; }
 class PDFViewer{
-  constructor(container, dims, anchors, side){ this.container=container; this.dims=dims; this.anchors=anchors; this.side=side; this.pdf=null; this.pageDivs=[]; this.rendered=new Map(); this.rendering=new Set(); this.offsets=[]; this.anchorsByPage=new Map(); for(const a of anchors){ const arr=this.anchorsByPage.get(a.page)||[]; arr.push(a); this.anchorsByPage.set(a.page,arr); } }
+  constructor(container, dims, anchors, side){ this.container=container; this.dims=dims; this.anchors=anchors; this.side=side; this.pdf=null; this.pageDivs=[]; this.rendered=new Map(); this.rendering=new Set(); this.offsets=[]; this.scales=[]; this.anchorsByPage=new Map(); for(const a of anchors){ const arr=this.anchorsByPage.get(a.page)||[]; arr.push(a); this.anchorsByPage.set(a.page,arr); } }
   async init(pdf){ this.pdf=pdf; this.rebuild(); }
+  fitScale(pageIndex){ const width=Math.max(1,this.container.clientWidth-12); const pageWidth=this.dims[pageIndex]?.[0]||width; return Math.max(0.2,(width/pageWidth)*state.zoom); }
+  scaleForPage(pageNum){ return this.scales[pageNum-1] || this.fitScale(pageNum-1); }
+  anchorTop(a){ return this.offsets[a.page-1] + a.y*this.scaleForPage(a.page); }
   rebuild(){
-    this.container.innerHTML=''; this.pageDivs=[]; this.rendered.clear(); this.rendering.clear(); this.offsets=buildOffsets(this.dims,state.scale);
+    this.container.innerHTML=''; this.pageDivs=[]; this.rendered.clear(); this.rendering.clear(); this.scales=this.dims.map((_,i)=>this.fitScale(i)); this.offsets=buildOffsets(this.dims,page=>this.scaleForPage(page));
     const frag=document.createDocumentFragment();
-    this.dims.forEach((d,i)=>{ const page=i+1; const div=document.createElement('div'); div.className='pageWrap'; div.dataset.page=page; div.style.width=(d[0]*state.scale)+'px'; div.style.height=(d[1]*state.scale)+'px'; const ph=document.createElement('div'); ph.className='placeholder'; ph.textContent='Page '+page; div.appendChild(ph); frag.appendChild(div); this.pageDivs.push(div); });
+    this.dims.forEach((d,i)=>{ const page=i+1; const scale=this.scaleForPage(page); const div=document.createElement('div'); div.className='pageWrap'; div.dataset.page=page; div.style.width=(d[0]*scale)+'px'; div.style.height=(d[1]*scale)+'px'; const ph=document.createElement('div'); ph.className='placeholder'; ph.textContent='Page '+page; div.appendChild(ph); frag.appendChild(div); this.pageDivs.push(div); });
     this.container.appendChild(frag);
     if(this.io) this.io.disconnect();
     this.io=new IntersectionObserver(entries=>{ for(const ent of entries){ const page=Number(ent.target.dataset.page); if(ent.isIntersecting) this.renderPage(page); else this.unrenderPage(page); } }, {root:this.container, rootMargin:'900px'});
@@ -140,7 +142,7 @@ class PDFViewer{
     if(this.rendered.has(pageNum)||this.rendering.has(pageNum)||!this.pdf) return;
     this.rendering.add(pageNum);
     try{
-      const page=await this.pdf.getPage(pageNum); const viewport=page.getViewport({scale:state.scale}); const div=this.pageDivs[pageNum-1]; if(!div) return;
+      const page=await this.pdf.getPage(pageNum); const viewport=page.getViewport({scale:this.scaleForPage(pageNum)}); const div=this.pageDivs[pageNum-1]; if(!div) return;
       div.innerHTML=''; div.style.width=viewport.width+'px'; div.style.height=viewport.height+'px';
       const canvas=document.createElement('canvas'); canvas.width=Math.ceil(viewport.width); canvas.height=Math.ceil(viewport.height); canvas.style.width=viewport.width+'px'; canvas.style.height=viewport.height+'px'; div.appendChild(canvas);
       await page.render({canvasContext:canvas.getContext('2d'), viewport}).promise;
@@ -151,14 +153,28 @@ class PDFViewer{
   unrenderPage(pageNum){ const div=this.pageDivs[pageNum-1]; if(!div) return; const rect=div.getBoundingClientRect(); const root=this.container.getBoundingClientRect(); if(rect.bottom < root.top-1800 || rect.top > root.bottom+1800){ div.innerHTML='<div class="placeholder">Page '+pageNum+'</div>'; this.rendered.delete(pageNum); } }
   addMarkers(pageNum, div){
     const arr=this.anchorsByPage.get(pageNum)||[];
-    for(const a of arr){ const m=document.createElement('div'); m.className='marker'; if(a.label===state.currentLabel) m.classList.add('currentMarker'); m.style.left=(a.x*state.scale)+'px'; m.style.top=(a.y*state.scale)+'px'; m.textContent=a.label; div.appendChild(m); }
+    const scale=this.scaleForPage(pageNum);
+    for(const a of arr){ const m=document.createElement('div'); m.className='marker'; if(a.label===state.currentLabel) m.classList.add('currentMarker'); m.style.left=(a.x*scale)+'px'; m.style.top=(a.y*scale)+'px'; m.textContent=a.label; div.appendChild(m); }
   }
-  scrollToAnchor(a, instant=false){ if(!a) return; const top=this.offsets[a.page-1] + a.y*state.scale - 82; this.container.scrollTo({top:Math.max(0,top), behavior: instant?'auto':'smooth'}); }
+  scrollToAnchor(a, instant=false){ if(!a) return; const top=this.anchorTop(a) - 82; this.container.scrollTo({top:Math.max(0,top), behavior: instant?'auto':'smooth'}); }
   currentAnswerLabel(){ const pos=this.container.scrollTop + 110; const arr=answerPositions; let lo=0,hi=arr.length-1,best=0; while(lo<=hi){ const mid=(lo+hi)>>1; if(arr[mid].top<=pos){best=mid;lo=mid+1}else hi=mid-1; } return arr[best]?.label; }
 }
 let qViewer, aViewer, answerPositions=[], questionPositions=[];
-function rebuildAnswerPositions(){ answerPositions=DATA.answerAnchors.map(a=>({label:a.label, top:aViewer.offsets[a.page-1]+a.y*state.scale})).sort((u,v)=>u.top-v.top); }
-function rebuildQuestionPositions(){ questionPositions=DATA.questionAnchors.map(a=>({label:a.label, top:qViewer.offsets[a.page-1]+a.y*state.scale})).sort((u,v)=>u.top-v.top); }
+function rebuildAnswerPositions(){ answerPositions=DATA.answerAnchors.map(a=>({label:a.label, top:aViewer.anchorTop(a)})).sort((u,v)=>u.top-v.top); }
+function rebuildQuestionPositions(){ questionPositions=DATA.questionAnchors.map(a=>({label:a.label, top:qViewer.anchorTop(a)})).sort((u,v)=>u.top-v.top); }
+function rebuildFitViewers(){
+  if(!qViewer || !aViewer) return;
+  const old=state.currentLabel;
+  qViewer.rebuild(); aViewer.rebuild(); rebuildAnswerPositions(); rebuildQuestionPositions();
+  if(old) setTimeout(()=>setCurrentLabel(old,'fitResize',true),50);
+}
+function initFitResize(){
+  if(!window.ResizeObserver) return;
+  let timer=null;
+  const schedule=()=>{ clearTimeout(timer); timer=setTimeout(rebuildFitViewers,120); };
+  const ro=new ResizeObserver(schedule);
+  ro.observe(el('qViewer')); ro.observe(el('aViewer'));
+}
 function labelAtScroll(container, positions){ const pos=container.scrollTop + 110; let lo=0,hi=positions.length-1,best=0; while(lo<=hi){ const mid=(lo+hi)>>1; if(positions[mid].top<=pos){best=mid;lo=mid+1}else hi=mid-1; } return positions[best]?.label; }
 function updateDropdowns(){
   const chSel=el('chapterSelect'); chSel.innerHTML='';
@@ -196,7 +212,8 @@ async function main(){
     el('prevBtn').addEventListener('click',()=>nextPrev(-1)); el('nextBtn').addEventListener('click',()=>nextPrev(1));
     el('syncToggle').addEventListener('change',e=>{state.sync=e.target.checked; status('Scroll sync '+(state.sync?'on':'off'));});
     el('markerToggle').addEventListener('change',e=>{state.showMarkers=e.target.checked; document.body.classList.toggle('hideMarkers',!state.showMarkers);});
-    el('zoomRange').addEventListener('change',()=>{ const old=state.currentLabel; state.scale=parseFloat(el('zoomRange').value); el('zoomText').textContent=Math.round(state.scale*100)+'%'; qViewer.rebuild(); aViewer.rebuild(); rebuildAnswerPositions(); rebuildQuestionPositions(); setTimeout(()=>setCurrentLabel(old,'zoom',true),50); });
+    el('zoomRange').addEventListener('change',()=>{ state.zoom=parseFloat(el('zoomRange').value); el('zoomText').textContent=Math.round(state.zoom*100)+'%'; rebuildFitViewers(); });
+    initFitResize();
     setProgress(100,'Ready'); setTimeout(()=>el('loading').classList.add('hidden'),400);
     status(DATA.counts.paired+' labels paired');
   }catch(e){ console.error(e); el('loadMsg').innerHTML='<b>Could not load viewer.</b><br>'+String(e.message||e); }
