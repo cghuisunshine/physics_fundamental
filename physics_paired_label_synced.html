@@ -61,7 +61,7 @@
 const DATA = window.PAIR_DATA;
 const PAGE_GAP = 8;
 const FIT_SCROLLBAR_ALLOWANCE = 18;
-const state = {zoom:1.0,currentLabel:null,programmatic:false,showMarkers:false,sync:true};
+const state = {zoom:1.0,currentLabel:null,programmatic:false,showMarkers:false,sync:true,resizingPanes:false};
 const el = id => document.getElementById(id);
 const status = msg => { const s=el('status'); s.textContent=msg; s.classList.remove('hidden'); clearTimeout(status.t); status.t=setTimeout(()=>s.classList.add('hidden'),1700); };
 const setProgress=(pct,msg)=>{ el('bar').style.width=pct+'%'; if(msg) el('loadMsg').textContent=msg; };
@@ -85,6 +85,7 @@ function initPaneResizer(){
     if(stacked.matches) return;
     event.preventDefault();
     divider.setPointerCapture(event.pointerId);
+    state.resizingPanes=true;
     document.body.classList.add('resizingPanes');
   });
   divider.addEventListener('pointermove',event=>{
@@ -97,7 +98,9 @@ function initPaneResizer(){
   });
   const stopDrag=event=>{
     if(divider.hasPointerCapture(event.pointerId)) divider.releasePointerCapture(event.pointerId);
+    state.resizingPanes=false;
     document.body.classList.remove('resizingPanes');
+    scheduleFitRebuild(0);
   };
   divider.addEventListener('pointerup',stopDrag);
   divider.addEventListener('pointercancel',stopDrag);
@@ -160,7 +163,7 @@ class PDFViewer{
   scrollToAnchor(a, instant=false){ if(!a) return; const top=this.anchorTop(a) - 82; this.container.scrollTo({top:Math.max(0,top), behavior: instant?'auto':'smooth'}); }
   currentAnswerLabel(){ const pos=this.container.scrollTop + 110; const arr=answerPositions; let lo=0,hi=arr.length-1,best=0; while(lo<=hi){ const mid=(lo+hi)>>1; if(arr[mid].top<=pos){best=mid;lo=mid+1}else hi=mid-1; } return arr[best]?.label; }
 }
-let qViewer, aViewer, answerPositions=[], questionPositions=[];
+let qViewer, aViewer, answerPositions=[], questionPositions=[], fitResizeTimer=null;
 function rebuildAnswerPositions(){ answerPositions=DATA.answerAnchors.map(a=>({label:a.label, top:aViewer.anchorTop(a)})).sort((u,v)=>u.top-v.top); }
 function rebuildQuestionPositions(){ questionPositions=DATA.questionAnchors.map(a=>({label:a.label, top:qViewer.anchorTop(a)})).sort((u,v)=>u.top-v.top); }
 function rebuildFitViewers(){
@@ -169,11 +172,14 @@ function rebuildFitViewers(){
   qViewer.rebuild(); aViewer.rebuild(); rebuildAnswerPositions(); rebuildQuestionPositions();
   if(old) setTimeout(()=>setCurrentLabel(old,'fitResize',true),50);
 }
+function scheduleFitRebuild(delay=120){
+  if(state.resizingPanes) return;
+  clearTimeout(fitResizeTimer);
+  fitResizeTimer=setTimeout(rebuildFitViewers,delay);
+}
 function initFitResize(){
   if(!window.ResizeObserver) return;
-  let timer=null;
-  const schedule=()=>{ clearTimeout(timer); timer=setTimeout(rebuildFitViewers,120); };
-  const ro=new ResizeObserver(schedule);
+  const ro=new ResizeObserver(()=>scheduleFitRebuild());
   ro.observe(el('qViewer')); ro.observe(el('aViewer'));
 }
 function labelAtScroll(container, positions){ const pos=container.scrollTop + 110; let lo=0,hi=positions.length-1,best=0; while(lo<=hi){ const mid=(lo+hi)>>1; if(positions[mid].top<=pos){best=mid;lo=mid+1}else hi=mid-1; } return positions[best]?.label; }
